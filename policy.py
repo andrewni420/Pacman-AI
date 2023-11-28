@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import json
+from gameparser import Parser
 
 directions = list(game.Actions._directions.keys())
 
@@ -31,15 +32,17 @@ def createTeam(firstIndex, secondIndex, isRed,
 
 
 
+
 class MLPPolicy(DummyAgent):
     def __init__(self, index, timeForComputing = .1, nnet=lambda x:[1.,1,1,1,1], construct_input=lambda x:np.array([1,1])):
         super().__init__(index, timeForComputing = timeForComputing)
         self.nnet=nnet 
         self.construct_input=construct_input
          
-
     def chooseAction(self, gameState: capture.GameState):
+        parser = Parser()
         actions = gameState.getLegalActions(self.index)
+        print(f"AGENT STATES {[parser.parse_state(gameState.getAgentState(i)) for i in range(gameState.getNumAgents()) if gameState.getAgentState(i).numReturned>0]}")
         input = self.construct_input(gameState)
         output = self.nnet(input)
         policy = np.array([output[directions.index(a)] for a in actions])
