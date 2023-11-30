@@ -42,15 +42,26 @@ class MLPPolicy(DummyAgent):
     def chooseAction(self, gameState: capture.GameState):
         parser = Parser()
         actions = gameState.getLegalActions(self.index)
-        print(f"AGENT STATES {[parser.parse_state(gameState.getAgentState(i)) for i in range(gameState.getNumAgents()) if gameState.getAgentState(i).numReturned>0]}")
+        # print(f"AGENT STATES {[parser.parse_state(gameState.getAgentState(i)) for i in range(gameState.getNumAgents()) if gameState.getAgentState(i).numReturned>0]}")
         input = self.construct_input(gameState)
         output = self.nnet(input)
         policy = np.array([output[directions.index(a)] for a in actions])
         policy = np.e**policy
         policy = policy/np.sum(policy)
-        print(f"POLICY: {policy}")
+        # print(f"POLICY: {policy}")
         rng = np.random.default_rng()
+
+        print(f"INDEX {self.index}")
+        print(f"RED {self.red}")
+        print(f"TEAM {self.agentsOnTeam}")
+        print(f"DISTANCER {self.distancer}")
+        print(f"OBS {len(self.observationHistory)}")
+        print(f"TIME {self.timeForComputing}")
+
         return actions[rng.choice(len(actions),p=policy)]
+    
+    
+
     
 class numpyLayer():
     def __call__(self, *args, **kwargs):

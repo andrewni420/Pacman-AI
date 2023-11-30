@@ -8,18 +8,23 @@ class Parser():
     def parse_game(self, gameState):
         #What should we use as inputs to the neural net?
         # 6 pairwise maze distances between pacman agents
-        # One-hot encoding for current agent index
-        # Information about each agent:
+
+        # How much more food is needed to win
+        # Information about each agent: 
         #   Location
         #   direction
         #   number of carried food
         #   scared timer
         #   one-hot encoding for whether it's scared
         #   one-hot encoding for ghost vs pacman
-        #   maze distance to nearest red food
-        #   maze distance to nearest blue food 
-        #   maze distance to nearest red capsule
-        #   maze distance to nearest blue capsule
+        #   maze distance to nearest opponent food
+        #   maze distance to nearest opponent capsule (what if doesn't exist? Infinite?)
+        # Some kind of "food density" to point pacman towards food-rich areas?
+        #   average position of food?
+        #   direction in which there is more food?
+        # How to tell pacman what the maze looks like?
+        #   One-hot local 3x3 wall/not wall/food/pellet and unravel?
+        #   5x5 would be 5x5x4=100 features
         pass 
         
 

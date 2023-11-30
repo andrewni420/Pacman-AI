@@ -17,6 +17,8 @@ from captureAgents import CaptureAgent
 import random, time, util
 from game import Directions
 import game, capture
+from gameparser import Parser
+from reward import Reward
 
 #################
 # Team creation #
@@ -52,6 +54,11 @@ class DummyAgent(CaptureAgent):
   You should look at baselineTeam.py for more details about how to
   create an agent as this is the bare minimum.
   """
+  def __init__( self, index, timeForComputing = .1, parser:Parser=None, reward:Reward=None):
+    super().__init__(index, timeForComputing=timeForComputing)
+    self.parser=parser
+    self.reward = reward
+    self.previous_score=0
 
   def registerInitialState(self, gameState: capture.GameState):
     """
@@ -77,7 +84,7 @@ class DummyAgent(CaptureAgent):
     '''
     Your initialization code goes here, if you need any.
     '''
-
+    self.registerTeam(self.getTeam())
 
   def chooseAction(self, gameState: capture.GameState):
     """
@@ -90,4 +97,55 @@ class DummyAgent(CaptureAgent):
     '''
 
     return random.choice(actions)
+  
+  # Agent index for querying state
+  #   self.index = index
+  # Whether or not you're on the red team
+  #   self.red = None
+  # Agent objects controlling you and your teammates
+  #   self.agentsOnTeam = None
+  # Maze distance calculator
+  #   self.distancer = None
+  # A history of observations
+  #   self.observationHistory = []
+  # Time to spend each turn on computing maze distances
+  #   self.timeForComputing = timeForComputing
+  # Access to the graphics
+  #   self.display = None
+
+  # def registerInitialState(self, gameState: capture.GameState):
+  # def final(self, gameState: capture.GameState):
+  # def registerTeam(self, agentsOnTeam):
+  # def observationFunction(self, gameState: capture.GameState):
+  # def debugDraw(self, cells, color, clear=False):
+  # def debugClear(self):
+  # def getAction(self, gameState: capture.GameState):
+  # def chooseAction(self, gameState: capture.GameState):
+  # def getFood(self, gameState: capture.GameState):
+  # def getFoodYouAreDefending(self, gameState: capture.GameState):
+  # def getCapsules(self, gameState: capture.GameState):
+  # def getCapsulesYouAreDefending(self, gameState: capture.GameState):
+  # def getOpponents(self, gameState: capture.GameState):
+  # def getTeam(self, gameState: capture.GameState):
+  # def getScore(self, gameState: capture.GameState):
+  # def getMazeDistance(self, pos1, pos2):
+  # def getPreviousObservation(self):
+  # def getCurrentObservation(self):
+
+  def observationFunction(self, gameState: capture.GameState):
+    if self.parser is None:
+      return super().observationFunction(gameState)
+    else:
+      return self.parser.parse_game(gameState)
+  
+  def rewardFunction(self, gameState: capture.GameState):
+    if self.reward is None:
+      cumulative_score = self.getScore(gameState)
+      score = cumulative_score-self.previous_score
+      self.previous_score=cumulative_score
+      return score
+    else:
+      return self.reward.reward(gameState) 
+
+
 
