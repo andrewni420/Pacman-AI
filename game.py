@@ -698,7 +698,13 @@ class Game:
                     self.unmute()
                     return
             else:
+                #PROBABLY STORE PREVIOUS STATE HERE
                 self.state = self.state.generateSuccessor( agentIndex, action )
+
+            ## PROBABLY CALL AGENT.UPDATE HERE
+            # self.state.getScore()-prev_state.getScore() or something. 
+            # Also have to consider whether agent is red or blue and 
+            # change the sign of the scores depending on that
 
             # Change the display
             self.display.update( self.state.data )

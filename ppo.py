@@ -4,8 +4,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.distributions import MultivariateNormal
-from myTeam import DummyAgent
-from gameparser import Parser
+from myTeam import Agent1
 import game, capture
 
 directions = list(game.Actions._directions.keys())
@@ -14,8 +13,7 @@ class PPOAgent(DummyAgent):
         super().__init__(index, timeForComputing = timeForComputing)
         self.nnet=nnet 
         self.construct_input=construct_input
-        self.logger = {"observations":[],
-                       }
+        self.logger = {"observations":[]}
          
     def chooseAction(self, gameState: capture.GameState):
         parser = Parser()
