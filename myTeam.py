@@ -95,6 +95,10 @@ class DummyAgent(CaptureAgent):
     self.start = gameState.getAgentPosition(self.index)
     self.boundary=self.get_boundary(gameState, self.red)
 
+    # print(f"AM RED? {self.red}")
+    # for b in self.boundary:
+    #   print(f"-1 {gameState.isRed((b[0]-1,b[1]))} 0 {gameState.isRed((b[0],b[1]))} 1 {gameState.isRed((b[0]+1,b[1]))}")
+
   def chooseAction(self, gameState: capture.GameState):
     """
     Picks among actions randomly.
@@ -228,6 +232,15 @@ class DummyAgent(CaptureAgent):
     myPos = gameState.getAgentState(self.index).getPosition()
     return self.nearest(myPos, scared)
   
+  def num_carried(self, gameState:capture.GameState) -> int:
+    return gameState.getAgentState(self.index).numCarrying
+  
+  def num_returned(self, gameState:capture.GameState) -> int:
+    return gameState.getAgentState(self.index).numReturned
+  
+  def is_scared(self, gameState:capture.GameState) -> bool:
+    return gameState.getAgentState(self.index).scaredTimer>0
+  
   def get_boundary(self, gameState, red):
     width = gameState.data.layout.width
     height = gameState.data.layout.height
@@ -240,7 +253,7 @@ class DummyAgent(CaptureAgent):
   
   def distance_to_home(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
     myPos = gameState.getAgentState(self.index).getPosition()
-    return self.nearest(myPos, self.get_boundary(gameState))
+    return self.nearest(myPos, self.get_boundary(gameState, self.red))
 
   def one_hot(self, gameState:capture.GameState) -> list[list[float]]:
     #Should cache some of these if there's runtime issues
@@ -254,8 +267,8 @@ class DummyAgent(CaptureAgent):
       blue_capsules[x][y]=1
     walls = np.array(gameState.getWalls().data, dtype=np.float32)
     width, height = gameState.data.layout.width, gameState.data.layout.height
-    red = np.array([[int(w<width/2) for h in range(height)] for w in range(width)])
-    blue = np.array([[int(w>=width/2) for h in range(height)] for w in range(width)])
+    red = np.array([[int(w<width/2)]*height for w in range(width)])
+    blue = np.array([[int(w>=width/2)]*height for w in range(width)])
     if self.red:
       return np.stack([red_food, red_capsules, red, blue_food, blue_capsules, blue, walls], axis=0)
     return np.stack([blue_food, blue_capsules, blue, red_food, red_capsules, red, walls], axis=0)
@@ -313,24 +326,26 @@ class DummyAgent(CaptureAgent):
 
 class Agent1(DummyAgent):
   
-
-
   def getFeatures(self, gameState: capture.GameState, action):
     """
     Returns a counter of features for the state
     """
-    # for b in self.register_boundary(gameState, False):
-    #   gameState.data.food[b[0]][b[1]]=True
     features = util.Counter()
     successor = self.getSuccessor(gameState, action)
     features["num_invaders"] = self.num_invaders(successor)
     features['invader_distance'] = 1/self.invaderDistance(successor)[0]
     features['defender_distance'] = 1/self.defenderDistance(successor)[0]
+    features['scared_distance'] = 1/self.scaredDistance(successor)[0]
     features['num_food'] = self.num_food(successor)
     features['nearest_food'] = 1/self.nearest_food(successor)[0]
     features['num_capsules'] = self.num_capsules(successor)
     features['nearest_capsule'] = 1/self.nearest_capsule(successor)[0]
     features['pacman_ghost'] = int(self.pacmanGhost(successor))
+    features['num_carried']= self.num_carried(successor)
+    features['distance_to_home']=1/self.distance_to_home(successor)[0]
+    features['carried*distance']=self.num_carried(successor)/self.distance_to_home(successor)[0]
+    features['num_returned']=self.num_returned(successor)
+
     return features
 
 
