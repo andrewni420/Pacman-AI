@@ -19,13 +19,19 @@ from game import Directions
 import game, capture
 from gameparser import Parser
 from reward import Reward
+from baselineTeam import ReflexCaptureAgent
+from util import nearestPoint
+from itertools import product
+import numpy as np 
+
+DEFAULT_DISTANCE=float('inf')
 
 #################
 # Team creation #
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'DummyAgent', second = 'DummyAgent'):
+               first = 'Agent1', second = 'Agent1'):
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -59,6 +65,7 @@ class DummyAgent(CaptureAgent):
     self.parser=parser
     self.reward = reward
     self.previous_score=0
+    
 
   def registerInitialState(self, gameState: capture.GameState):
     """
@@ -84,20 +91,177 @@ class DummyAgent(CaptureAgent):
     '''
     Your initialization code goes here, if you need any.
     '''
-    self.registerTeam(self.getTeam())
+    self.registerTeam(self.getTeam(gameState))
+    self.start = gameState.getAgentPosition(self.index)
+    self.boundary=self.get_boundary(gameState, self.red)
 
   def chooseAction(self, gameState: capture.GameState):
     """
     Picks among actions randomly.
     """
     actions = gameState.getLegalActions(self.index)
+    # try:
+    # You can profile your evaluation time by uncommenting these lines
+    # start = time.time()
+    values = [self.evaluate(gameState, a) for a in actions]
+    # print 'eval time for agent %d: %.4f' % (self.index, time.time() - start)
 
-    '''
-    You should change this in your own agent.
-    '''
-
-    return random.choice(actions)
+    maxValue = max(values)
+    bestActions = [a for a, v in zip(actions, values) if v == maxValue]
+    return random.choice(bestActions)
+    # finally:
+    #   return random.choice(actions)
   
+  
+  def getSuccessor(self, gameState: capture.GameState, action):
+    """
+    Finds the next successor which is a grid position (location tuple).
+    """
+    successor = gameState.generateSuccessor(self.index, action)
+    pos = successor.getAgentState(self.index).getPosition()
+    if pos != nearestPoint(pos):
+      # Only half a grid position was covered
+      return successor.generateSuccessor(self.index, action)
+    else:
+      return successor
+
+  def evaluate(self, gameState: capture.GameState, action):
+    """
+    Computes a linear combination of features and feature weights
+    """
+    features = self.getFeatures(gameState, action)
+    weights = self.getWeights(gameState, action)
+    return features * weights
+
+  def getFeatures(self, gameState: capture.GameState, action):
+    """
+    Returns a counter of features for the state
+    """
+    return self.default_observation(gameState, action)
+
+  def getWeights(self, gameState, action):
+    """
+    Normally, weights do not depend on the gamestate.  They can be either
+    a counter or a dictionary.
+    """
+    return self.default_weights(gameState, action)
+  
+  def default_observation(self, gameState:capture.GameState, action):
+    features = util.Counter()
+    successor = self.getSuccessor(gameState, action)
+    features['successorScore'] = self.getScore(successor)
+    return features 
+  
+  def default_weights(self, gameState:capture.GameState, action):
+    return {'successorScore': 1.0} 
+  
+  def nearest(self, myPos, posList, default=DEFAULT_DISTANCE) -> tuple[int, tuple[int, int]]:
+    minDistance= float('inf')
+    minPos=None 
+    for pos in posList:
+      dist = self.getMazeDistance(myPos, pos)
+      if dist<minDistance:
+        minDistance=dist 
+        minPos = pos
+    return (default if minDistance==float('inf') else minDistance), (myPos if minPos is None else minPos)
+  
+  def nearest_food(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
+    foodList = self.getFood(gameState).asList()  
+    myPos = gameState.getAgentState(self.index).getPosition()
+    return self.nearest(myPos, foodList)
+  
+  def num_food(self, gameState:capture.GameState) -> int:
+    return len(self.getFood(gameState).asList())
+  
+  def nearest_capsule(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
+    capsuleList = self.getCapsules(gameState)
+    myPos = gameState.getAgentState(self.index).getPosition()
+    return self.nearest(myPos, capsuleList)
+  
+  def num_capsules(self, gameState:capture.GameState) -> int:
+    return len(self.getCapsules(gameState))
+  
+  def isPacman(self, gameState:capture.GameState) -> bool:
+    myState = gameState.getAgentState(self.index)
+    return myState.isPacman
+  
+  def pacmanGhost(self, gameState:capture.GameState) -> bool:
+    pacman = [gameState.getAgentState(i).isPacman for i in self.getTeam(gameState)]
+    return len(set(pacman))!=1
+  
+  def invaders(self, gameState:capture.GameState):
+    enemies = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+    invaders = [a.getPosition() for a in enemies if a.isPacman and a.getPosition() != None]
+    return invaders
+  
+  def defenders(self, gameState:capture.GameState):
+    enemies = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+    defenders = [a.getPosition() for a in enemies if (not a.isPacman) and a.getPosition() != None and a.scaredTimer==0]
+    return defenders
+  
+  def scared(self, gameState:capture.GameState):
+    enemies = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+    defenders = [a.getPosition() for a in enemies if (not a.isPacman) and a.getPosition() != None and a.scaredTimer>0]
+    return defenders
+  
+  def num_invaders(self, gameState:capture.GameState) -> int:
+    return len(self.invaders(gameState))
+  
+  def num_defenders(self, gameState:capture.GameState) -> int:
+    return len(self.defenders(gameState))
+  
+  def num_scared(self, gameState:capture.GameState) -> int:
+    return len(self.scared(gameState))
+  
+  def invaderDistance(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
+    invaders = self.invaders(gameState)
+    myPos = gameState.getAgentState(self.index).getPosition()
+    return self.nearest(myPos, invaders)
+    
+  def defenderDistance(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
+    defenders = self.defenders(gameState)
+    myPos = gameState.getAgentState(self.index).getPosition()
+    return self.nearest(myPos, defenders)
+  
+  def scaredDistance(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
+    scared = self.scared(gameState)
+    myPos = gameState.getAgentState(self.index).getPosition()
+    return self.nearest(myPos, scared)
+  
+  def get_boundary(self, gameState, red):
+    width = gameState.data.layout.width
+    height = gameState.data.layout.height
+    halfway = width//2
+    if red:
+      boundary = [(halfway-1,h) for h in range(height) if not gameState.hasWall(halfway-1,h)]
+    else:
+      boundary = [(halfway,h) for h in range(height) if not gameState.hasWall(halfway,h)]
+    return boundary
+  
+  def distance_to_home(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
+    myPos = gameState.getAgentState(self.index).getPosition()
+    return self.nearest(myPos, self.get_boundary(gameState))
+
+  def one_hot(self, gameState:capture.GameState) -> list[list[float]]:
+    #Should cache some of these if there's runtime issues
+    red_food = np.array(gameState.getRedFood().data, dtype=np.float32)
+    red_capsules = np.zeros_like(red_food)
+    for x,y in gameState.getRedCapsules():
+      red_capsules[x][y]=1
+    blue_food = np.array(gameState.getBlueFood().data, dtype=np.float32)
+    blue_capsules = np.zeros_like(blue_food)
+    for x,y in gameState.getBlueCapsules():
+      blue_capsules[x][y]=1
+    walls = np.array(gameState.getWalls().data, dtype=np.float32)
+    width, height = gameState.data.layout.width, gameState.data.layout.height
+    red = np.array([[int(w<width/2) for h in range(height)] for w in range(width)])
+    blue = np.array([[int(w>=width/2) for h in range(height)] for w in range(width)])
+    if self.red:
+      return np.stack([red_food, red_capsules, red, blue_food, blue_capsules, blue, walls], axis=0)
+    return np.stack([blue_food, blue_capsules, blue, red_food, red_capsules, red, walls], axis=0)
+
+  
+
   # Agent index for querying state
   #   self.index = index
   # Whether or not you're on the red team
@@ -147,5 +311,41 @@ class DummyAgent(CaptureAgent):
     else:
       return self.reward.reward(gameState) 
 
+class Agent1(DummyAgent):
+  
 
 
+  def getFeatures(self, gameState: capture.GameState, action):
+    """
+    Returns a counter of features for the state
+    """
+    # for b in self.register_boundary(gameState, False):
+    #   gameState.data.food[b[0]][b[1]]=True
+    features = util.Counter()
+    successor = self.getSuccessor(gameState, action)
+    features["num_invaders"] = self.num_invaders(successor)
+    features['invader_distance'] = 1/self.invaderDistance(successor)[0]
+    features['defender_distance'] = 1/self.defenderDistance(successor)[0]
+    features['num_food'] = self.num_food(successor)
+    features['nearest_food'] = 1/self.nearest_food(successor)[0]
+    features['num_capsules'] = self.num_capsules(successor)
+    features['nearest_capsule'] = 1/self.nearest_capsule(successor)[0]
+    features['pacman_ghost'] = int(self.pacmanGhost(successor))
+    return features
+
+
+  def getWeights(self, gameState, action):
+    """
+    Normally, weights do not depend on the gamestate.  They can be either
+    a counter or a dictionary.
+    """
+    return {
+            'num_invaders': -1000,
+            'invader_distance': 100,
+            'defender_distance':-10,
+            'num_food':-100,
+            'nearest_food':10,
+            # 'num_capsules':-100,
+            # 'nearest_capsule':10,
+            'pacman_ghost':10
+            }
