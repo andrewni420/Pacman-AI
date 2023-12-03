@@ -210,8 +210,8 @@ class ReinforcementAgent(ValueEstimationAgent):
         """
           Called by Pacman game at the terminal state
         """
-        deltaReward = state.getScore() - self.lastState.getScore()
-        self.observeTransition(self.lastState, self.lastAction, state, deltaReward)
+        # deltaReward = state.getScore() - self.lastState.getScore()
+        # self.observeTransition(self.lastState, self.lastAction, state, deltaReward)
         self.stopEpisode()
 
         # Make sure we have this var
@@ -286,7 +286,7 @@ class QLearningAgent(ReinforcementAgent):
           there are no legal actions, which is the case at the
           terminal state, you should return a value of 0.0.
         """
-        actions = self.getLegalActions(state)
+        actions = state.getLegalActions(self.index)
         if len(actions)==0:
             return 0.0
         rew = [self.getQValue(state,a) for a in actions]
@@ -300,7 +300,7 @@ class QLearningAgent(ReinforcementAgent):
           are no legal actions, which is the case at the terminal state,
           you should return None.
         """
-        actions = self.getLegalActions(state)
+        actions = state.getLegalActions(self.index)
         if len(actions)==0:
             return None
         rew = [self.getQValue(state,a) for a in actions]
@@ -319,7 +319,7 @@ class QLearningAgent(ReinforcementAgent):
           HINT: To pick randomly from a list, use random.choice(list)
         """
         # Pick Action
-        legalActions = self.getLegalActions(state)
+        legalActions = state.getLegalActions(self.index)
         if util.flipCoin(self.epsilon):
             return random.choice(legalActions)
         else:

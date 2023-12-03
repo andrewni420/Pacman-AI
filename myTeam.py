@@ -32,7 +32,7 @@ DEFAULT_DISTANCE=float('inf')
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'FeatureQAgent', second = 'Agent1'):
+               first = 'FeatureQAgent', second = 'FeatureQAgent', numTraining = 0):
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -254,7 +254,8 @@ class DummyAgent(CaptureAgent):
   
   def distance_to_home(self, gameState:capture.GameState) -> tuple[int, tuple[int, int]]:
     myPos = gameState.getAgentState(self.index).getPosition()
-    return self.nearest(myPos, self.get_boundary(gameState, self.red))
+    dist,pos = self.nearest(myPos, self.get_boundary(gameState, self.red))
+    return max(.5, dist), pos
 
   def one_hot(self, gameState:capture.GameState) -> list[list[float]]:
     #Should cache some of these if there's runtime issues
@@ -380,9 +381,14 @@ class FeatureQAgent(PacmanQAgent, Agent1):
         PacmanQAgent.__init__(self, **kwargs)
         Agent1.__init__(self, index, timeForComputing=timeForComputing, parser=parser, reward=reward)
         self.weights = util.Counter()
+        
 
     def getWeights(self):
         return self.weights
+    
+    def registerInitialState(self, gameState: capture.GameState):
+      Agent1.registerInitialState(self, gameState)
+      PacmanQAgent.registerInitialState(self, gameState)
 
     def getQValue(self, state, action):
         """
@@ -390,9 +396,25 @@ class FeatureQAgent(PacmanQAgent, Agent1):
           where * is the dotProduct operator
         """
 
-        features = self.featExtractor.getFeatures(state,action)
+        features = self.featExtractor(state,action)
         return sum([features[f]*self.weights[f] for f in features])
 
+    def getAction(self, state):
+        """
+          Compute the action to take in the current state.  With
+          probability self.epsilon, we should take a random action and
+          take the best policy action otherwise.  Note that if there are
+          no legal actions, which is the case at the terminal state, you
+          should choose None as the action.
+          HINT: You might want to use util.flipCoin(prob)
+          HINT: To pick randomly from a list, use random.choice(list)
+        """
+        # Pick Action
+        legalActions = state.getLegalActions(self.index)
+        if util.flipCoin(self.epsilon):
+            return random.choice(legalActions)
+        else:
+            return self.computeActionFromQValues(state)
 
     def update(self, state, action, nextState, reward: float):
         """
@@ -400,7 +422,7 @@ class FeatureQAgent(PacmanQAgent, Agent1):
         """
 
         difference = reward+self.discount*self.computeValueFromQValues(nextState) - self.getQValue(state,action)
-        features = self.featExtractor.getFeatures(state,action)
+        features = self.featExtractor(state,action)
 
         for f in features.keys():
             self.weights[f]+=self.alpha*difference*features[f]
