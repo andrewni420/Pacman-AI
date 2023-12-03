@@ -49,7 +49,7 @@ The keys are
   P2: 'l', ';', ',' and 'p' to move
 """
 from game import GameStateData
-from game import Game
+from game import Game, TrackGame
 from game import Directions
 from game import Actions
 from util import nearestPoint
@@ -63,11 +63,6 @@ import keyboardAgents
 
 # If you change these, you won't affect the server, so you can't cheat
 KILL_POINTS = 0
-# ***BEGIN REMOVED FOR CONTEST 2***
-# SONAR_NOISE_RANGE = 13 # Must be odd
-# SONAR_NOISE_VALUES = [i - (SONAR_NOISE_RANGE - 1)/2 for i in range(SONAR_NOISE_RANGE)]
-# SIGHT_RANGE = 5 # Manhattan distance
-# ***END REMOVED FOR CONTEST 2***
 MIN_FOOD = 2
 TOTAL_FOOD = 60
 
@@ -76,10 +71,6 @@ DUMP_FOOD_ON_DEATH = True # if we have the gameplay element that dumps dots on d
 SCARED_TIME = 40
 CRASH_PENALTY = 100 # the penalty for crashing (due to timeout or exceptions)
 
-# ***BEGIN REMOVED FOR CONTEST 2***
-# def noisyDistance(pos1, pos2):
-#   return int(util.manhattanDistance(pos1, pos2) + random.choice(SONAR_NOISE_VALUES))
-# ***END REMOVED FOR CONTEST 2***
 
 ###################################################
 # YOUR INTERFACE TO THE PACMAN WORLD: A GameState #
@@ -380,6 +371,21 @@ class CaptureRules:
     starter = random.randint(0,1)
     print(('%s team starts' % ['Red', 'Blue'][starter]))
     game = Game(agents, display, self, startingIndex=starter, muteAgents=muteAgents, catchExceptions=catchExceptions)
+    game.state = initState
+    game.length = length
+    game.state.data.timeleft = length
+    if 'drawCenterLine' in dir(display):
+      display.drawCenterLine()
+    self._initBlueFood = initState.getBlueFood().count()
+    self._initRedFood = initState.getRedFood().count()
+    return game
+  
+  def newTrackGame( self, layout, agents, display, length, muteAgents, catchExceptions ):
+    initState = GameState()
+    initState.initialize( layout, len(agents) )
+    starter = random.randint(0,1)
+    print(('%s team starts' % ['Red', 'Blue'][starter]))
+    game = TrackGame(agents, display, self, startingIndex=starter, muteAgents=muteAgents, catchExceptions=catchExceptions)
     game.state = initState
     game.length = length
     game.state.data.timeleft = length
@@ -968,7 +974,9 @@ def replayGame( layout, agents, actions, display, length, redTeamName, blueTeamN
 
     display.finish()
 
-def runGames( layouts, agents, display, length, numGames, record, numTraining, redTeamName, blueTeamName, muteAgents=False, catchExceptions=False ):
+
+
+def runGames( layouts, agents, display, length, numGames, record, numTraining, redTeamName, blueTeamName, muteAgents=False, catchExceptions=False, trackGame=True):
 
   rules = CaptureRules()
   games = []
@@ -987,9 +995,13 @@ def runGames( layouts, agents, display, length, numGames, record, numTraining, r
     else:
         gameDisplay = display
         rules.quiet = False
-    g = rules.newGame( layout, agents, gameDisplay, length, muteAgents, catchExceptions )
+    if trackGame:
+      g = rules.newTrackGame( layout, agents, gameDisplay, length, muteAgents, catchExceptions )
+    else:
+      g = rules.newGame( layout, agents, gameDisplay, length, muteAgents, catchExceptions )
     g.run()
     if not beQuiet: games.append(g)
+    
 
     g.record = None
     if record:
@@ -1004,6 +1016,7 @@ def runGames( layouts, agents, display, length, numGames, record, numTraining, r
         f.write(g.record)
 
   if numGames > 1:
+
     scores = [game.state.data.score for game in games]
     redWinRate = [s > 0 for s in scores].count(True)/ float(len(scores))
     blueWinRate = [s < 0 for s in scores].count(True)/ float(len(scores))

@@ -328,12 +328,15 @@ class DummyAgent(CaptureAgent):
 
 class Agent1(DummyAgent):
   
-  def getFeatures(self, gameState: capture.GameState, action):
+  def getFeatures(self, gameState: capture.GameState, action=None):
     """
     Returns a counter of features for the state
     """
     features = util.Counter()
-    successor = self.getSuccessor(gameState, action)
+    if action is not None:
+      successor = self.getSuccessor(gameState, action)
+    else:
+      successor = gameState
     features["num_invaders"] = self.num_invaders(successor)
     features['invader_distance'] = 1/self.invaderDistance(successor)[0]
     features['defender_distance'] = 1/self.defenderDistance(successor)[0]
