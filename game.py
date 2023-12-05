@@ -700,10 +700,22 @@ class Game:
                     return
             else:
                 #PROBABLY STORE PREVIOUS STATE HERE
+                prev_state = self.state.deepCopy()
                 self.state = self.state.generateSuccessor( agentIndex, action )
 
             ## PROBABLY CALL AGENT.UPDATE HERE
-            # self.state.getScore()-prev_state.getScore() or something. 
+            # rew = self.state.getScore()-prev_state.getScore() or something. 
+            # rew = (self.state.getScore()-prev_state.getScore())*(1 if agent.red else -1)
+            rew=0
+            # rew+=50*(len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList()))
+            rew+=200*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
+            # print(agent.getCapsules(prev_state))
+            # rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
+            # print(f"prev rew {rew}")
+            rew += 1*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
+            # print(f"post rew {rew}")
+            if hasattr(agent, "update"):
+                agent.update(prev_state, action, self.state, rew)
             # Also have to consider whether agent is red or blue and 
             # change the sign of the scores depending on that
 
@@ -735,6 +747,21 @@ class Game:
                     self.unmute()
                     return
         self.display.finish()
+
+    def food_potential(self, state, agentIndex):
+        red = self.agents[agentIndex].red 
+        food = state.getBlueFood() if red else state.getRedFood()
+        food = food.asList()
+        pos = state.getAgentPosition(agentIndex)
+        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,f) for f in food])
+        return total
+    
+    def capsule_potential(self, state, agentIndex):
+        red = self.agents[agentIndex].red 
+        capsules = state.getBlueCapsules() if red else state.getRedCapsules()
+        pos = state.getAgentPosition(agentIndex)
+        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,c) for c in capsules])
+        return total
 
 class TrackGame(Game):
     def __init__( self, agents, display, rules, startingIndex=0, muteAgents=False, catchExceptions=False):
@@ -782,7 +809,17 @@ class TrackGame(Game):
 
         self.current_agent_index=self.startingIndex
         return self.state.deepCopy(), None
-        
+    
+    def food_potential(self, state, agentIndex):
+        red = self.agents[agentIndex].red 
+        food = state.getBlueFood() if red else state.getRedFood()
+        food = food.asList()
+        pos = state.getAgentPosition(agentIndex)
+        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,f) for f in food])
+        return total
+
+    def potential_reward(self, prev_state, state, agentIndex):
+        return self.food_potential(state,agentIndex)-self.food_potential(prev_state,agentIndex) 
 
     def run( self ):
         ep_obs = [[] for _ in range(len(self.agents))]
@@ -817,25 +854,27 @@ class TrackGame(Game):
 
             ep_obs[agentIndex].append(agent.construct_input(self.state.deepCopy()))
             policy = agent.get_policy(self.state.deepCopy())
-            action, idx = agent.chooseAction(self.state.deepCopy(), policy=policy)
+            action, log_prob, idx = agent.get_action(self.state.deepCopy(), policy=policy)
             # print(f"Legal actions {self.state.getLegalActions(agentIndex)}")
             # print(f"chosen action {action}")
             # print(f"INDICES {agentIndex} {agent.index}")
 
             ep_acts[agentIndex].append(idx)
-            ep_log_probs[agentIndex].append(policy)
+            ep_log_probs[agentIndex].append(log_prob)
             ep_lens[agentIndex][0]+=1
             
-
-            red = agentIndex in self.state.getRedTeamIndices()
-            reward = (self.state.getScore()-prev_state.getScore())*(1 if red else -1)
-            ep_rews[agentIndex].append(reward)
 
             self.unmute()
 
             # Execute the action
             self.moveHistory.append( (agentIndex, action) )
             self.state = self.state.generateSuccessor( agentIndex, action )
+
+            red = agentIndex in self.state.getRedTeamIndices()
+            reward = (self.state.getScore()-prev_state.getScore())*(1 if red else -1)
+            reward+=self.potential_reward(prev_state, self.state, agentIndex)
+            # print(f"REWARD: {self.potential_reward(prev_state, self.state, agentIndex)}")
+            ep_rews[agentIndex].append(reward)
 
             # Change the display
             self.display.update( self.state.data )

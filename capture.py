@@ -976,7 +976,7 @@ def replayGame( layout, agents, actions, display, length, redTeamName, blueTeamN
 
 
 
-def runGames( layouts, agents, display, length, numGames, record, numTraining, redTeamName, blueTeamName, muteAgents=False, catchExceptions=False, trackGame=True):
+def runGames( layouts, agents, display, length, numGames, record, numTraining, redTeamName, blueTeamName, muteAgents=False, catchExceptions=False, trackGame=False):
 
   rules = CaptureRules()
   games = []
@@ -992,9 +992,13 @@ def runGames( layouts, agents, display, length, numGames, record, numTraining, r
         import textDisplay
         gameDisplay = textDisplay.NullGraphics()
         rules.quiet = True
+        for a in agents:
+          a.training()
     else:
         gameDisplay = display
         rules.quiet = False
+        for a in agents:
+          a.eval()
     if trackGame:
       g = rules.newTrackGame( layout, agents, gameDisplay, length, muteAgents, catchExceptions )
     else:

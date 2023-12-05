@@ -138,6 +138,11 @@ class CaptureAgent(Agent):
       if isinstance(self.display, PacmanGraphics):
         self.display.clearDebug()
 
+  def training(self):
+    self.train=True
+  def eval(self):
+    self.train=False
+
   #################
   # Action Choice #
   #################

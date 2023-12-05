@@ -62,6 +62,15 @@ class ReflexCaptureAgent(CaptureAgent):
     self.start = gameState.getAgentPosition(self.index)
     CaptureAgent.registerInitialState(self, gameState)
 
+  def get_policy(self, gameState):
+    return None 
+  def get_action(self, gameState, policy=None):
+    return self.chooseAction(gameState), 0, 0
+  def store_episode(self, *args):
+    pass 
+  def construct_input(self, gameState):
+    return 0
+
   def chooseAction(self, gameState: capture.GameState):
     """
     Picks among the actions with the highest Q(s,a).
