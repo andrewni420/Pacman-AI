@@ -32,7 +32,7 @@ from util import nearestPoint
 #################
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'OffensiveReflexAgent', second = 'DefensiveReflexAgent', numTraining = 0):
+               first = 'DoNothing', second = 'DoNothing', numTraining = 0):
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -52,6 +52,10 @@ def createTeam(firstIndex, secondIndex, isRed,
 ##########
 # Agents #
 ##########
+
+class DoNothing(CaptureAgent):
+  def chooseAction(self, gameState: capture.GameState):
+    return Directions.STOP
 
 class ReflexCaptureAgent(CaptureAgent):
   """

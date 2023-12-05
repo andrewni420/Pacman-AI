@@ -341,16 +341,19 @@ class Agent1(DummyAgent):
     # features['invader_distance'] = 1/self.invaderDistance(successor)[0]
     # features['defender_distance'] = 1/self.defenderDistance(successor)[0]
     # features['scared_distance'] = 1/self.scaredDistance(successor)[0]
-    # features['num_food'] = self.num_food(successor)-self.num_food(gameState)
-    # features['nearest_food'] = 1/self.nearest_food(successor)[0]#/(gameState.data.layout.width*gameState.data.layout.height)
+    features['num_food'] = self.num_food(successor)-self.num_food(gameState)
+    features['nearest_food'] = 1/self.nearest_food(successor)[0]#/(gameState.data.layout.width*gameState.data.layout.height)
     features['num_capsules'] = self.num_capsules(successor)-self.num_capsules(gameState)
     features['nearest_capsule'] = 1/self.nearest_capsule(successor)[0]
+    # features['capsules']=-2*(self.num_capsules(successor)-self.num_capsules(gameState))+1/self.nearest_capsule(successor)[0]
+    # f=features['capsules']
+    # print(f"capsules {f} {self.num_capsules(successor)-self.num_capsules(gameState)}")
     features["bias"]=1.0
     # features['pacman_ghost'] = int(self.pacmanGhost(successor))
     # features['num_carried']= self.num_carried(successor)
     # features['distance_to_home']=1/self.distance_to_home(successor)[0]
-    # features['carried*distance']=self.num_carried(successor)/self.distance_to_home(successor)[0]-self.num_carried(gameState)/self.distance_to_home(gameState)[0]
-    # features['num_returned']=self.num_returned(successor)
+    features['carried*distance']=self.num_carried(successor)/self.distance_to_home(successor)[0]#-self.num_carried(gameState)/self.distance_to_home(gameState)[0]
+    features['num_returned']=self.num_returned(successor)-self.num_returned(gameState)
     features.divideAll(20.0)
 
     return features
@@ -418,10 +421,9 @@ class FeatureQAgent(PacmanQAgent, Agent1):
           HINT: To pick randomly from a list, use random.choice(list)
         """
         # Pick Action
-        # self.epsilon=0.2
+        self.epsilon=0.2
         legalActions = state.getLegalActions(self.index)
-        print(self.train)
-        if util.flipCoin(self.epsilon) and self.train:
+        if self.train and util.flipCoin(self.epsilon):
             return random.choice(legalActions)
         else:
             return self.computeActionFromQValues(state)
@@ -442,9 +444,17 @@ class FeatureQAgent(PacmanQAgent, Agent1):
         difference = reward+self.discount*self.computeValueFromQValues(nextState) - self.getQValue(state,action)
         features = self.featExtractor(state,action)
 
-        for f in features.keys():
-            self.weights[f]+=self.alpha*difference*features[f]
+        self.alpha=0.1
+        self.discount=0.9
 
+        # print(f"PARAMETERS: {self.alpha} {self.discount} {difference}")
+        # print("BEFORE")
+        # print(self.weights)
+
+        for f in features.keys():
+            # print(features[f])
+            self.weights[f]+=self.alpha*difference*features[f]
+        # print("AFTER")
         # print(self.weights)
 
 

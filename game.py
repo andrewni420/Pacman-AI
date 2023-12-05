@@ -706,14 +706,24 @@ class Game:
             ## PROBABLY CALL AGENT.UPDATE HERE
             # rew = self.state.getScore()-prev_state.getScore() or something. 
             # rew = (self.state.getScore()-prev_state.getScore())*(1 if agent.red else -1)
+
             rew=0
-            # rew+=50*(len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList()))
-            rew+=200*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
-            # print(agent.getCapsules(prev_state))
-            # rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
-            # print(f"prev rew {rew}")
-            rew += 1*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
-            # print(f"post rew {rew}")
+            if "num_carried" in dir(agent):
+                rew+=3*(len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList()))
+                rew+=50*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
+                rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
+                rew += 2*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
+                rew+=10*(agent.num_carried(self.state)/agent.distance_to_home(self.state)[0]-agent.num_carried(prev_state)/agent.distance_to_home(prev_state)[0])
+                rew+=20*(agent.num_returned(self.state)-agent.num_returned(prev_state))
+                rew=rew/10
+                if len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList())>0:
+                    print(f"food reward: {rew}")
+                if len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state))>0:
+                    print(f"capsule reward: {rew}")
+                if agent.num_returned(self.state)-agent.num_returned(prev_state)>0:
+                    print(f"returned reward: {rew}")
+                                                               
+
             if hasattr(agent, "update"):
                 agent.update(prev_state, action, self.state, rew)
             # Also have to consider whether agent is red or blue and 
@@ -741,6 +751,8 @@ class Game:
                     self.mute(agentIndex)
                     agent.final( self.state )
                     self.unmute()
+                    if hasattr(agent,"weights"):
+                        print(agent.weights)
                 except Exception as data:
                     if not self.catchExceptions: raise
                     self._agentCrash(agentIndex)
