@@ -337,14 +337,14 @@ class Agent1(DummyAgent):
       successor = self.getSuccessor(gameState, action)
     else:
       successor = gameState
-    # features["num_invaders"] = self.num_invaders(successor)
-    # features['invader_distance'] = 1/self.invaderDistance(successor)[0]
-    # features['defender_distance'] = 1/self.defenderDistance(successor)[0]
+    features["num_invaders"] = self.num_invaders(successor)-self.num_invaders(gameState)
+    features['invader_distance'] = 1/self.invaderDistance(successor)[0]-features["num_invaders"]
+    features['defender_distance'] = 1/self.defenderDistance(successor)[0]
     # features['scared_distance'] = 1/self.scaredDistance(successor)[0]
     features['num_food'] = self.num_food(successor)-self.num_food(gameState)
-    features['nearest_food'] = 1/self.nearest_food(successor)[0]#/(gameState.data.layout.width*gameState.data.layout.height)
+    features['nearest_food'] = 1/self.nearest_food(successor)[0]-features['num_food']#/(gameState.data.layout.width*gameState.data.layout.height)
     features['num_capsules'] = self.num_capsules(successor)-self.num_capsules(gameState)
-    features['nearest_capsule'] = 1/self.nearest_capsule(successor)[0]
+    features['nearest_capsule'] = 1/self.nearest_capsule(successor)[0]-features['num_capsules']
     # features['capsules']=-2*(self.num_capsules(successor)-self.num_capsules(gameState))+1/self.nearest_capsule(successor)[0]
     # f=features['capsules']
     # print(f"capsules {f} {self.num_capsules(successor)-self.num_capsules(gameState)}")
@@ -352,8 +352,9 @@ class Agent1(DummyAgent):
     # features['pacman_ghost'] = int(self.pacmanGhost(successor))
     # features['num_carried']= self.num_carried(successor)
     # features['distance_to_home']=1/self.distance_to_home(successor)[0]
-    features['carried*distance']=self.num_carried(successor)/self.distance_to_home(successor)[0]#-self.num_carried(gameState)/self.distance_to_home(gameState)[0]
     features['num_returned']=self.num_returned(successor)-self.num_returned(gameState)
+    features['carried*distance']=self.num_carried(successor)/self.distance_to_home(successor)[0]+features['num_returned']#-self.num_carried(gameState)/self.distance_to_home(gameState)[0]
+    
     features.divideAll(20.0)
 
     return features

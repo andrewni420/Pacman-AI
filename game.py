@@ -713,9 +713,13 @@ class Game:
                 rew+=50*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
                 rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
                 rew += 2*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
-                rew+=10*(agent.num_carried(self.state)/agent.distance_to_home(self.state)[0]-agent.num_carried(prev_state)/agent.distance_to_home(prev_state)[0])
-                rew+=20*(agent.num_returned(self.state)-agent.num_returned(prev_state))
+                rew+=5*(agent.num_carried(self.state)/agent.distance_to_home(self.state)[0]-agent.num_carried(prev_state)/agent.distance_to_home(prev_state)[0])
+                rew+=10*(agent.num_returned(self.state)-agent.num_returned(prev_state))
+                rew+=2*(1/agent.invaderDistance(self.state)[0]-1/agent.invaderDistance(prev_state)[0])
+                rew+=4*(agent.num_invaders(prev_state)-agent.num_invaders(self.state))
+                rew+=3*(1/agent.defenderDistance(prev_state)[0]-1/agent.defenderDistance(self.state)[0])
                 rew=rew/10
+
                 if len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList())>0:
                     print(f"food reward: {rew}")
                 if len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state))>0:
