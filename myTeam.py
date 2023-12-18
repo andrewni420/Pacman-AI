@@ -52,10 +52,12 @@ def createTeam(firstIndex, secondIndex, isRed,
 #   weights1 = util.Counter()+{'num_invaders': -0.013479729939564427, 'invader_distance1': 0.03629469993644022, 'defender_distance2': -0.01972775197185327, 'num_food': -0.098637537366583, 'nearest_food': 0.17136591888119238, 'num_capsules': -0.04895257882228501, 'nearest_capsule': 0.07639516409658403, 'num_returned': 0.3235903097276173, 'carried*distance': 0.44918195138694783}
 #   weights2 = util.Counter()+{'num_invaders': -0.011736192788425368, 'invader_distance1': 0.04701688752960884, 'defender_distance2': -0.01972775197185327, 'num_food': -0.15432440626610708, 'nearest_food': 0.24777839420202466, 'num_capsules': -0.14258824477737306, 'nearest_capsule': 0.16537410244871983, 'num_returned': 0.5914549260014474, 'carried*distance': 0.8208652967410837}
 
-  weights1 = util.Counter()+{"my_side":1, 'stopped':-10,'closest_pct_dist2':-2,'num_invaders': -20.02675723064652907, 'invader_distance': 0.05338341115202663, 'defender_distance2': -4*2.55172188893904676, 'num_food': -2.3890522818672748, 'nearest_food': 2.8550866808539808, 'num_capsules': -10.4712666917274702, 'nearest_capsule': 5.206300266430704, 'num_returned': 10.145592233476731, 'carried*distance': 9.9751003150469721}
-  weights2=util.Counter()+{"my_side":-1,'stopped':-10,'closest_pct_dist2':-10,'closest_pct_dist':10,'num_invaders': -20.746859189935796, 'invader_distance': 2.4472217426187603, 'defender_distance2': -4*2.15172188893904676, 'num_food': -0.6054812234429122, 'nearest_food': 0.57987299691582, 'num_capsules': -3.7568271666189083, 'nearest_capsule': 0.51754101782037785, 'num_returned': 10.917579649610557, 'carried*distance': 3.23128985327646}
-
-  return [FeatureQAgent(weights1, weights2, True, firstIndex), FeatureQAgent(weights2, weights1, False, secondIndex)]
+  weights1 = util.Counter()+{"scared": -18.829733057160003, 'stopped':-9.698363673306392,'closest_pct_dist2':-2.82774302829107,'num_invaders': -37.02675723064652907, 'invader_distance': 0.05338341115202663, 'defender_distance2': -8.55172188893904676, 'num_food': -2.3890522818672748, 'nearest_food': 2.8550866808539808, 'num_capsules': -10.4712666917274702, 'nearest_capsule': 5.206300266430704, 'num_returned': 10.145592233476731, 'carried*distance': 9.9751003150469721}
+  weights2=util.Counter()+{"scared": -14.276257497774725, 'stopped':-6.90902955155292,'closest_pct_dist2':-11.150085562378225,'closest_pct_dist':9.405267465312648,'num_invaders': -46.746859189935796, 'invader_distance': 2.4472217426187603, 'defender_distance2': -8.15172188893904676, 'num_food': -0.6054812234429122, 'nearest_food': 0.57987299691582, 'num_capsules': -3.7568271666189083, 'nearest_capsule': 0.51754101782037785, 'num_returned': 10.917579649610557, 'carried*distance': 3.23128985327646}
+  team = FeatureQAgent(weights1, weights2, True, firstIndex), FeatureQAgent(weights2, weights1, False, secondIndex)
+  team[0].register_teammate(team[1])
+  team[1].register_teammate(team[0])
+  return team
 
 
 
@@ -598,6 +600,7 @@ class Agent1(DummyAgent):
     features['nearest_capsule'] = 1/self.nearest_capsule(successor, distancer=distancer)[0]-features['num_capsules']
     # features["bias"]=1.0
     features["enclosed"] = (int(successor.getAgentPosition(self.index) in self.enclosed) - int(gameState.getAgentPosition(self.index) in self.enclosed)) and def_dist<4
+    features["scared"] = int(self.is_scared(successor))
     # teammate_distance=self.distance_to_teammate(successor, distancer=distancer)[0]
     # features["teammate_distance"]=1/teammate_distance**2 if teammate_distance<5 else 0
        
@@ -634,11 +637,20 @@ class FeatureQAgent(Agent1):
         self.weights2 = weights2 
         self.atk = atk
         
-    def switchWeights(self):
+    def switchWeights(self, recur=True):
+        
         # return
+        self.atk= not self.atk
+        print(f"AGENT {self.index} ATK {self.atk}")
         temp = self.weights1
         self.weights1=self.weights2 
         self.weights2 = temp 
+        if recur:
+          self.other.switchWeights(False)
+
+    def register_teammate(self, other):
+      self.other = other
+
     def registerInitialState(self, gameState: capture.GameState):
       Agent1.registerInitialState(self, gameState)
 
@@ -685,12 +697,13 @@ class FeatureQAgent(Agent1):
         other_width = state.getAgentPosition(other_index)[0]
         if self.red:
           other_more_atk = other_width>w/2+1 and my_width<w/2-1
+          self_more_atk = my_width>w/2+1 and other_width<w/2-1
         else:
           other_more_atk = other_width<w/2-1 and my_width>w/2+1
+          self_more_atk = my_width<w/2-1 and other_width>w/2+1
 
-        if (not self.atk and not other_more_atk) or (self.atk and other_more_atk):
+        if (not self.atk and self_more_atk) or (self.atk and other_more_atk):
           self.switchWeights()
-          self.atk=not self.atk 
           # print(f"AGENT {self.index} SWITCHING WEIGHTS FROM {not self.atk} TO {self.atk}")
 
         if  util.flipCoin(0.01):
