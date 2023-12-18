@@ -26,6 +26,7 @@ import traceback
 import sys
 from environment import Environment
 import numpy as np 
+from collections import deque
 
 #######################
 # Parts worth reading #
@@ -566,12 +567,27 @@ class Game:
         sys.stderr = OLD_STDERR
 
 
-    def run( self ):
+    def run( self , percent=0):
+    
         """
         Main control loop for game play.
         """
         self.display.initialize(self.state.data)
         self.numMoves = 0
+        num_carried = [0]*len(self.agents)
+        prev_states = [self.state.deepCopy() for _ in self.agents]
+        prev_actions = [None for _ in self.agents]
+        prev_rew = [0]*len(self.agents)
+        delayed_rew = [0]*len(self.agents)
+        changed_potential = [0]*len(self.agents)
+        delta_rew = [0]*len(self.agents)
+        
+#state0 _agent0_ state1 _agent1_ state2 _agent2_ state3 _agent3_ state4 _agent0_
+#state4 - state3 + state2 - state0
+        state_deque = deque([(self.state.deepCopy(), None, None) for _ in range(10)], maxlen=10)
+        action_deque = deque([None for _ in range(10)], maxlen=10)
+        for a in self.agents:
+            a.percent=percent
 
         ###self.display.initialize(self.state.makeObservation(1).data)
         # inform learning agents of the game start
@@ -641,6 +657,26 @@ class Game:
             else:
                 observation = self.state.deepCopy()
 
+            # rew1 = self.reward1(agentIndex, prev_states[agentIndex])
+            if "num_carried" in dir(agent):
+                # print(f"CUR INDEX {agentIndex} PREV INDICES {[i[2] for i in list(state_deque)[::-1]]}")
+                rtotal = self.calculate_reward(agentIndex, self.state,percent)-self.calculate_reward(agentIndex, state_deque[-4][0],percent)
+                rother = (self.calculate_reward(agentIndex, state_deque[-1][0],percent)-self.calculate_reward(agentIndex, state_deque[-2][0],percent))
+                rew1 =  rtotal-rother
+                # rew1 = self.calculate_reward(agentIndex, self.state, percent)-self.calculate_reward(agentIndex, prev_states[agentIndex], percent)
+                # rew1-=delta_rew[agentIndex]
+                # print(f"AGENT {agentIndex} REW {rew1} RTOTAL {rtotal} ROTHER {rother}")
+            else:
+                rew1=0
+            # rew = prev_rew[agentIndex]
+            # if abs(rew-rew1)/max(abs(rew),0.001)>0.001:
+            #     print(f"REWARD DIFF PREV {prev_rew} \
+            #           INDEX {agentIndex} REW {rew1} \
+            #             FOOD {agent.num_carried(self.state)-agent.num_carried(prev_state)}\
+            #                POTENTIAL {self.food_potential(self.state, agentIndex)-self.food_potential(prev_states[agentIndex], agentIndex)} ")
+
+            # if hasattr(agent, "update") and not agent.freeze and state_deque[-4][1] is not None:
+            #     agent.update(state_deque[-4][0], state_deque[-4][1], self.state, rew1)
             # Solicit an action
             action = None
             self.mute(agentIndex)
@@ -688,6 +724,8 @@ class Game:
                 action = agent.getAction(observation)
             self.unmute()
 
+            
+
             # Execute the action
             self.moveHistory.append( (agentIndex, action) )
             if self.catchExceptions:
@@ -701,37 +739,45 @@ class Game:
             else:
                 #PROBABLY STORE PREVIOUS STATE HERE
                 prev_state = self.state.deepCopy()
+                prev_states[agentIndex]=self.state.deepCopy()
+                prev_actions[agentIndex]=action
                 self.state = self.state.generateSuccessor( agentIndex, action )
+                if hasattr(agent, "num_carried"):
+                    rew=self.calculate_reward(agentIndex, self.state,percent)-self.calculate_reward(agentIndex, prev_state,percent)
+                    pos = [state.getAgentPosition(agentIndex) for state,_,_ in list(state_deque)[::-1]]
+                    rew2 = self.calculate_reward(agentIndex, state_deque[-1][0],percent)-self.calculate_reward(agentIndex, state_deque[-5][0],percent)
+                    # print(f"AGENT {agentIndex} REW {rew} REW2 {rew2} ACTION {action} STATES {pos}")
+                state_deque.append((prev_state, action, agentIndex))
+                if hasattr(agent, "num_carried"):
+                    other_index = (agentIndex+2)%4
+                    rself = self.calculate_reward(other_index, self.state,percent)-self.calculate_reward(other_index, state_deque[-1][0],percent)
+                    # print(f"AGENT {agentIndex} RSELF {rself}")
+
 
             ## PROBABLY CALL AGENT.UPDATE HERE
             # rew = self.state.getScore()-prev_state.getScore() or something. 
             # rew = (self.state.getScore()-prev_state.getScore())*(1 if agent.red else -1)
+            delayed_rew[agentIndex]=self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
+            other_index = (agentIndex+2)%4
+            changed_potential[other_index]=self.food_potential(self.state, other_index)-self.food_potential(prev_state, other_index)
 
-            rew=0
+
+            # delta_rew[other_index]=self.reward1(other_index,prev_state)
+            
+
+            rew = self.reward1(agentIndex, prev_state)
             if "num_carried" in dir(agent):
-                rew+=3*(len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList()))
-                rew+=50*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
-                rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
-                rew += 2*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
-                rew+=5*(agent.num_carried(self.state)/agent.distance_to_home(self.state)[0]-agent.num_carried(prev_state)/agent.distance_to_home(prev_state)[0])
-                rew+=10*(agent.num_returned(self.state)-agent.num_returned(prev_state))
-                rew+=2*(1/agent.invaderDistance(self.state)[0]-1/agent.invaderDistance(prev_state)[0])
-                rew+=4*(agent.num_invaders(prev_state)-agent.num_invaders(self.state))
-                rew+=3*(1/agent.defenderDistance(prev_state)[0]-1/agent.defenderDistance(self.state)[0])
-                rew=rew/10
+                delta_rew[other_index]=self.calculate_reward(other_index,self.state,percent)-self.calculate_reward(other_index,prev_state,percent)
+                # dr = self.calculate_reward(agentIndex, self.state, 1)-self.calculate_reward(agentIndex, prev_state, 1)
+                # print(f"REWARD {rew} DR {dr/10} PERCENT DIFF {abs(rew-dr/10)/max(abs(rew),0.0001)}")
+            # rew+=delayed_rew[agentIndex]
+            prev_rew[agentIndex]=rew
 
-                if len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList())>0:
-                    print(f"food reward: {rew}")
-                if len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state))>0:
-                    print(f"capsule reward: {rew}")
-                if agent.num_returned(self.state)-agent.num_returned(prev_state)>0:
-                    print(f"returned reward: {rew}")
-                                                               
-
+            # print(f"NEXT REW {agentIndex} {rew}")
+            
+                                                            
             if hasattr(agent, "update"):
                 agent.update(prev_state, action, self.state, rew)
-            # Also have to consider whether agent is red or blue and 
-            # change the sign of the scores depending on that
 
             # Change the display
             self.display.update( self.state.data )
@@ -748,15 +794,31 @@ class Game:
             if _BOINC_ENABLED:
                 boinc.set_fraction_done(self.getProgress())
 
+        for i in range(4):
+            agent = self.agents[agentIndex]
+            if "num_carried" in dir(agent):
+                rtotal = self.calculate_reward(agentIndex, self.state,percent)-self.calculate_reward(agentIndex, state_deque[-4][0],percent)
+                rother = (self.calculate_reward(agentIndex, state_deque[-1][0],percent)-self.calculate_reward(agentIndex, state_deque[-2][0],percent))
+                rew1 =  rtotal-rother
+            else:
+                rew1=0
+            if hasattr(agent, "update") and state_deque[-4][1] is not None:
+                agent.update(state_deque[-4][0], state_deque[-4][1], self.state, rew1)
+            state_deque.append((self.state.deepCopy(), None, agentIndex))
+            agentIndex = (agentIndex+1)%4
+            
+
         # inform a learning agent of the game result
         for agentIndex, agent in enumerate(self.agents):
+            
             if "final" in dir( agent ) :
                 try:
                     self.mute(agentIndex)
                     agent.final( self.state )
                     self.unmute()
-                    if hasattr(agent,"weights"):
-                        print(agent.weights)
+                    # if hasattr(agent,"mlp"):
+                    #     print(f"AGENT {agent.index} \nWEIGHT {agent.mlp.weight} \nCOPY {agent.mlp_copy} \nDIFF {agent.mlp.weight-agent.mlp_copy}")
+                        
                 except Exception as data:
                     if not self.catchExceptions: raise
                     self._agentCrash(agentIndex)
@@ -764,20 +826,153 @@ class Game:
                     return
         self.display.finish()
 
-    def food_potential(self, state, agentIndex):
+    def food_potential(self, state, agentIndex, inverse=True):
         red = self.agents[agentIndex].red 
         food = state.getBlueFood() if red else state.getRedFood()
         food = food.asList()
         pos = state.getAgentPosition(agentIndex)
-        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,f) for f in food])
+        dists = [self.agents[agentIndex].getMazeDistance(pos,f) for f in food]
+        total = sum([(1/d if inverse else d) for d in dists])
         return total
     
-    def capsule_potential(self, state, agentIndex):
+    def capsule_potential(self, state, agentIndex, inverse=True):
         red = self.agents[agentIndex].red 
         capsules = state.getBlueCapsules() if red else state.getRedCapsules()
         pos = state.getAgentPosition(agentIndex)
-        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,c) for c in capsules])
+        dists = [self.agents[agentIndex].getMazeDistance(pos,c) for c in capsules]
+        total = sum([(1/d if inverse else d) for d in dists])
         return total
+    
+    def calculate_reward(self, agentIndex, state, percent):
+        features = self.reward_features(agentIndex, state)
+        # print(f"AGENT {agentIndex} REWARD FEATURES {features}")
+        weights = [self.reward1_weights(), self.reward2_weights(), self.reward3_weights()]
+        modified = [1-percent+0.01, abs(percent-0.5)+0.01, percent+0.01]
+        for w,m in zip(weights,modified):
+            w.divideAll(1/m)
+        reward = (weights[0]+weights[1]+weights[2])*features
+        # if features["opp_returned"]>0:
+        #     print(f"_____\n_____\n_____\nRETURNED REWARD")
+        #     print(f"AGENT {agentIndex} REWARD FEATURES {features} REWARD {reward}")
+        # print(f"AGENT {agentIndex} REWARD FEATURES {features} REWARD {reward}")
+        return reward
+    
+    def reward_features(self, agentIndex, state):
+        agent = self.agents[agentIndex]
+        opponents = agent.getOpponents(state)
+        rew = Counter()
+        rew["num_carried"] = agent.num_carried(state)
+        rew["opp_carried"] = sum([state.getAgentState(i).numCarrying for i in opponents])/2
+
+        rew["num_capsules"]=len(agent.getCapsules(state))
+        rew["opp_capsules"]=sum([len(self.agents[i].getCapsules(state)) for i in opponents])/2
+
+        rew["num_returned"]=agent.num_returned(state)
+        rew["opp_returned"] = sum([state.getAgentState(i).numReturned for i in opponents])/2
+
+        rew["food_potential"]=self.food_potential(state,agentIndex)
+        rew["capsule_potential"]=self.capsule_potential(state,agentIndex)
+        rew["opp_food_potential"]=sum([self.food_potential(state,i) for i in opponents])/2
+        rew["opp_capsule_potential"]=sum([self.capsule_potential(state,i) for i in opponents])/2
+
+        rew["carried_distance"]=agent.num_carried(state)/agent.distance_to_home(state)[0]
+        rew["opp_carried_distance"]=sum([state.getAgentState(i).numCarrying/agent.opp_distance_to_home(state,i)[0] for i in opponents])/2
+
+        rew["invader_distance"]=1/agent.invaderDistance(state)[0]
+        rew["opp_invader_distance"]=sum([1/agent.oppInvaderDistance(state,i)[0] for i in opponents])/2
+        rew["num_invaders"]=agent.num_invaders(state)
+        rew["opp_invaders"]=len(agent.opp_invaders(state))/2
+
+        defender_distance = agent.defenderDistance(state)[0]
+        opp_defender_distance = [agent.oppDefenderDistance(state,i)[0] for i in opponents]
+        rew["defender_distance"]=1/defender_distance if defender_distance<5 else 0
+        rew["opp_defender_distance"]=sum([(1/d if d<5 else 0) for d in opp_defender_distance])/2
+
+        rew["enclosed"] = state.getAgentPosition(agentIndex) in agent.enclosed and defender_distance<3
+        rew["opp_enclosed"] = sum([(state.getAgentPosition(i) in agent.opp_enclosed and opp_defender_distance[opponents.index(i)]<3) for i in opponents])/2
+
+        rew["total_food_dist"] = self.food_potential(state, agentIndex, inverse=False)
+        rew["total_capsule_dist"] = self.capsule_potential(state, agentIndex, inverse=False)
+        rew["total_defender_distance"]=agent.total_defender_distance(state,inverse=False)
+        rew["total_invader_distance"]=agent.total_invader_distance(state,inverse=False)
+        
+        return rew
+
+    def reward1_weights(self):
+        c = Counter()
+        c = c+{"num_carried":4, "num_capsules":-50, "food_potential":1, "capsule_potential":2, "carried_distance":5, 
+                "num_returned":20, "invader_distance":2, "num_invaders":-4, "defender_distance":-5, "enclosed":-1}
+        c=c-{"opp_carried":4, "opp_capsules":-50, "opp_food_potential":1, "opp_capsule_potential":2, "opp_carried_distance":5, 
+                "opp_returned":20, "opp_invader_distance":2, "opp_invaders":-4, "opp_defender_distance":-5, "opp_enclosed":-1}
+        c.divideAll(len(c)/2)
+
+        return c
+        # return Counter()+{"total_food_dist":-1/600, "num_carried":4}
+
+        # AGENT 3 REWARD FEATURES {'num_carried': 0,  'opp_carried': 0.0, 
+        #                          'num_capsules': 1, 'opp_capsules': 0.0, 
+        #                          'num_returned': 0, 'opp_returned': 9.0, 
+        #                          'food_potential': 0.39765092477947633, 'opp_food_potential': 0.07185730935730936,
+        #                          'capsule_potential': 0.02040816326530612, 'opp_capsule_potential': 0.0,
+        #                         'carried_distance': 0.0, 'opp_carried_distance': 0.0, 
+        #                         'invader_distance': 0.0, 'opp_invader_distance': 0.0, 
+        #                         'num_invaders': 0, 'opp_invaders': 0.0, 
+        #                         'defender_distance': 0, 'opp_defender_distance': 0.0, 
+        #                         'enclosed': False, 'opp_enclosed': 0.0, 
+        #                         'total_food_dist': 1016, 'total_capsule_dist': 49, 
+        #                         'total_defender_distance': 98, 'total_invader_distance': 0} 
+        # REWARD -0.22963339005804723
+    
+    def reward2_weights(self):
+        c = Counter()
+        c=c+{"num_carried":4, "num_capsules":50,"num_returned":20, "num_invaders":4, "enclosed":1}
+        c.divideAll(len(c))
+        return self.reward1_weights()
+    
+    def reward3_weights(self):
+        c = Counter()
+        c=c+{"num_returned":20}
+        c.divideAll(len(c))
+        return self.reward1_weights()
+
+    
+    def reward1(self, agentIndex, prev_state, verbose=False):
+        rew=0
+        agent = self.agents[agentIndex]
+        if "num_carried" in dir(agent):
+            # rew+=3*(len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList()))
+            rew+=4*(agent.num_carried(self.state)-agent.num_carried(prev_state))
+            rew+=50*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
+            rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
+            rew += 2*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
+            rew+=5*(agent.num_carried(self.state)/agent.distance_to_home(self.state)[0]-agent.num_carried(prev_state)/agent.distance_to_home(prev_state)[0])
+            rew+=20*(agent.num_returned(self.state)-agent.num_returned(prev_state))
+            rew+=2*(1/agent.invaderDistance(self.state)[0]-1/agent.invaderDistance(prev_state)[0])
+            rew+=4*(agent.num_invaders(prev_state)-agent.num_invaders(self.state))
+            prev_def_dist = agent.defenderDistance(prev_state)[0]
+            prev_def_dist = float("inf") if prev_def_dist>5 else prev_def_dist
+            cur_def_dist = agent.defenderDistance(self.state)[0]
+            cur_def_dist = float("inf") if cur_def_dist>5 else cur_def_dist
+            rew+=5*((1)/prev_def_dist-(1)/cur_def_dist)
+            rew+=(int(prev_state.getAgentPosition(agentIndex) in agent.enclosed and agent.defenderDistance(prev_state)[0]<3) - int(self.state.getAgentPosition(agentIndex) in agent.enclosed and agent.defenderDistance(prev_state)[0]<3))
+            # cur_tdist = agent.distance_to_teammate(self.state)[0]
+            # prev_tdist = agent.distance_to_teammate(prev_state)[0]
+            # cur_tdist = 1/cur_tdist if cur_tdist<5 else 0
+            # prev_tdist = 1/prev_tdist if prev_tdist<5 else 0
+            # rew+=0.01*(prev_tdist-cur_tdist)
+            rew=rew/10
+
+            # if len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList())!=0:
+            #     print(f"food reward: {4*(agent.num_carried(self.state)-agent.num_carried(prev_state))}")
+            # if len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state))!=0:
+            #     print(f"capsule reward: {rew}")
+            # if agent.num_returned(self.state)-agent.num_returned(prev_state)!=0:
+            #     print(f"returned reward: {rew}")
+            # if verbose:
+            #     print(f"REWARD {agentIndex} \
+            #           FOOD {agent.num_carried(self.state)-agent.num_carried(prev_state)}\
+            #           TOTAL {rew}")
+        return rew
 
 class TrackGame(Game):
     def __init__( self, agents, display, rules, startingIndex=0, muteAgents=False, catchExceptions=False):
@@ -826,12 +1021,12 @@ class TrackGame(Game):
         self.current_agent_index=self.startingIndex
         return self.state.deepCopy(), None
     
-    def food_potential(self, state, agentIndex):
+    def food_potential(self, state, agentIndex, inverse=True):
         red = self.agents[agentIndex].red 
         food = state.getBlueFood() if red else state.getRedFood()
         food = food.asList()
         pos = state.getAgentPosition(agentIndex)
-        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,f) for f in food])
+        total = sum([1/self.agents[agentIndex].getMazeDistance(pos,f) if inverse else self.agents[agentIndex].getMazeDistance(pos,f) for f in food])
         return total
 
     def potential_reward(self, prev_state, state, agentIndex):
@@ -887,10 +1082,24 @@ class TrackGame(Game):
             self.state = self.state.generateSuccessor( agentIndex, action )
 
             red = agentIndex in self.state.getRedTeamIndices()
-            reward = (self.state.getScore()-prev_state.getScore())*(1 if red else -1)
-            reward+=self.potential_reward(prev_state, self.state, agentIndex)
+
+            rew=0
+            if "num_carried" in dir(agent):
+                rew+=3*(len(agent.getFood(prev_state).asList())-len(agent.getFood(self.state).asList()))
+                rew+=50*(len(agent.getCapsules(prev_state))-len(agent.getCapsules(self.state)))
+                rew += self.food_potential(self.state, agentIndex)-self.food_potential(prev_state, agentIndex)
+                rew += 2*(self.capsule_potential(self.state, agentIndex)-self.capsule_potential(prev_state, agentIndex))
+                rew+=5*(agent.num_carried(self.state)/agent.distance_to_home(self.state)[0]-agent.num_carried(prev_state)/agent.distance_to_home(prev_state)[0])
+                rew+=10*(agent.num_returned(self.state)-agent.num_returned(prev_state))
+                rew+=2*(1/agent.invaderDistance(self.state)[0]-1/agent.invaderDistance(prev_state)[0])
+                rew+=4*(agent.num_invaders(prev_state)-agent.num_invaders(self.state))
+                rew+=3*(1/agent.defenderDistance(prev_state)[0]-1/agent.defenderDistance(self.state)[0])
+                rew=rew*100
+            
+            # reward = (self.state.getScore()-prev_state.getScore())*(1 if red else -1)
+            # reward+=self.potential_reward(prev_state, self.state, agentIndex)
             # print(f"REWARD: {self.potential_reward(prev_state, self.state, agentIndex)}")
-            ep_rews[agentIndex].append(reward)
+            ep_rews[agentIndex].append(rew)
 
             # Change the display
             self.display.update( self.state.data )

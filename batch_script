@@ -1,0 +1,6 @@
+#!/bin/sh
+#SBATCH -n 1
+#SBATCH --cpus-per-task 2
+
+name="capture"
+srun --output "${name}/%t.out" --error "${name}/%t.err" python capture.py -r baselineTeam -b myTeam -x 10 -n 11

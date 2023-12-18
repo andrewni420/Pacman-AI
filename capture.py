@@ -19,6 +19,8 @@
 # purposes. The Pacman AI projects were developed at UC Berkeley, primarily by
 # John DeNero (denero@cs.berkeley.edu) and Dan Klein (klein@cs.berkeley.edu).
 # For more info, see http://inst.eecs.berkeley.edu/~cs188/sp09/pacman.html
+from collections import deque 
+from copy import deepcopy 
 
 """
 Capture.py holds the logic for Pacman capture the flag.
@@ -60,6 +62,8 @@ from game import Agent
 from game import reconstituteGrid
 import sys, util, types, time, random, imp
 import keyboardAgents
+
+
 
 # If you change these, you won't affect the server, so you can't cheat
 KILL_POINTS = 0
@@ -823,6 +827,8 @@ def readCommand( argv ):
                     help=default('How many episodes are training (suppresses output)'), default=0)
   parser.add_option('-c', '--catchExceptions', action='store_true', default=False,
                     help='Catch exceptions and enforce time limits')
+  parser.add_option('--self_play', action='store_true', default=False,
+                    help='Whether to use self-play')
 
   options, otherjunk = parser.parse_args(argv)
   assert len(otherjunk) == 0, "Unrecognized options: " + str(otherjunk)
@@ -892,11 +898,17 @@ def readCommand( argv ):
   # Choose a layout
   import layout
   layouts = []
+  total_layouts = ["alleyCapture", "bloxCapture", "crowdedCapture", "defaultCapture", "distantCapture", "fastCapture",\
+                   "jumboCapture", "mediumCapture", "officeCapture", "strategicCapture", "tinyCapture",
+                   "RANDOM", "RANDOM", "RANDOM"]
   for i in range(options.numGames):
     if options.layout == 'RANDOM':
       l = layout.Layout(randomLayout().split('\n'))
     elif options.layout.startswith('RANDOM'):
       l = layout.Layout(randomLayout(int(options.layout[6:])).split('\n'))
+    elif options.layout=="total":
+      l_ = random.choice(total_layouts)
+      l = layout.Layout(randomLayout().split('\n')) if l_=="RANDOM" else layout.getLayout(l_)
     elif options.layout.lower().find('capture') == -1:
       raise Exception( 'You must use a capture layout with capture.py')
     else:
@@ -911,6 +923,9 @@ def readCommand( argv ):
   args['numTraining'] = options.numTraining
   args['record'] = options.record
   args['catchExceptions'] = options.catchExceptions
+  args['self_play']=options.self_play
+  testRed = loadAgents(True, "baselineTeam", nokeyboard, redArgs)
+  args['test_agents'] = sum([list(el) for el in zip(testRed, blueAgents)],[]) # list of agents
   return args
 
 def randomLayout(seed = None):
@@ -976,7 +991,7 @@ def replayGame( layout, agents, actions, display, length, redTeamName, blueTeamN
 
 
 
-def runGames( layouts, agents, display, length, numGames, record, numTraining, redTeamName, blueTeamName, muteAgents=False, catchExceptions=False, trackGame=False):
+def runGames( layouts, agents, display, length, numGames, record, numTraining, redTeamName, blueTeamName, muteAgents=False, catchExceptions=False, trackGame=False, test_agents= None, self_play=False):
 
   rules = CaptureRules()
   games = []
@@ -984,7 +999,13 @@ def runGames( layouts, agents, display, length, numGames, record, numTraining, r
   if numTraining > 0:
     print('Playing %d training games' % numTraining)
 
+  k_prev = deque(maxlen = 10)
+  best_counter = 0
+  best_threshold = 4
+
+
   for i in range( numGames ):
+    print(f"GAME {i}")
     beQuiet = i < numTraining
     layout = layouts[i]
     if beQuiet:
@@ -993,17 +1014,43 @@ def runGames( layouts, agents, display, length, numGames, record, numTraining, r
         gameDisplay = textDisplay.NullGraphics()
         rules.quiet = True
         for a in agents:
-          a.training()
+          a.training(i/numTraining)
+        if self_play:
+          if random.random()<0.8 or len(k_prev)<2:
+            v1,v2 = [1,3] if random.random()<0.5 else [3,1]
+            agents[0]=deepcopy(agents[v1])
+            agents[2]=deepcopy(agents[v2])
+          else:
+            prev_agents = random.choice(k_prev)
+            agents[0] = prev_agents[0]
+            agents[2] = prev_agents[1]
+          agents[0].freeze=True
+          agents[2].freeze=True
+          best_counter+=1
+          if best_counter>best_threshold:
+            best_counter=0
+            k_prev.append((deepcopy(agents[1]),deepcopy(agents[3])))
+          agents[0].index=0
+          agents[2].index=2
+          cur_agents=agents
+        else:
+          cur_agents = agents
     else:
         gameDisplay = display
         rules.quiet = False
         for a in agents:
           a.eval()
+        cur_agents = test_agents
+    print(f"AGENTS {cur_agents}")
     if trackGame:
-      g = rules.newTrackGame( layout, agents, gameDisplay, length, muteAgents, catchExceptions )
+      g = rules.newTrackGame( layout, cur_agents, gameDisplay, length, muteAgents, catchExceptions )
     else:
-      g = rules.newGame( layout, agents, gameDisplay, length, muteAgents, catchExceptions )
-    g.run()
+      g = rules.newGame( layout, cur_agents, gameDisplay, length, muteAgents, catchExceptions )
+    if numTraining>0:
+      g.run(min(1,(i+1)/numTraining))
+    else:
+      g.run(1)
+    # g.run(0)
     if not beQuiet: games.append(g)
     
 

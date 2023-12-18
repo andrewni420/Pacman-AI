@@ -89,6 +89,8 @@ class CaptureAgent(Agent):
     # Access to the graphics
     self.display = None
 
+    self.freeze=False
+
   def registerInitialState(self, gameState: capture.GameState):
     """
     This method handles the initial setup of the
@@ -138,8 +140,9 @@ class CaptureAgent(Agent):
       if isinstance(self.display, PacmanGraphics):
         self.display.clearDebug()
 
-  def training(self):
+  def training(self, percent):
     self.train=True
+    self.percent = percent
   def eval(self):
     self.train=False
 

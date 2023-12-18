@@ -438,6 +438,7 @@ class PacmanGraphics:
     end_graphics()
 
   def to_screen(self, point):
+    # print(f"POINT {point}")
     ( x, y ) = point
     #y = self.height - y
     x = (x + 1)*self.gridSize

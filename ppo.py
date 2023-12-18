@@ -10,7 +10,7 @@ import game, capture, json, pickle
 from collections import OrderedDict
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'FeatureQAgent', second = 'Agent1', numTraining=0):
+               first = 'PPOAgent', second = 'Agent1', numTraining=0):
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -27,10 +27,12 @@ def createTeam(firstIndex, secondIndex, isRed,
   """
 
   # The following line is an example only; feel free to change it.
-  m1,a1 = mlp(13,[64, 64],5), mlp(13,[64, 64],1)
-  m2,a2 = mlp(13,[64, 64],5), mlp(13,[64, 64],1)
-  return PPOAgent(firstIndex, actor=m1, critic=a1, obs_dim=13, act_dim=5),\
-        PPOAgent(secondIndex, actor=m2, critic=a2, obs_dim=13, act_dim=5)
+#   m1,a1 = mlp(13,[64, 64],5), mlp(13,[64, 64],1)
+#   m2,a2 = mlp(13,[64, 64],5), mlp(13,[64, 64],1)
+  m1, a1 = default_net(20,5), default_net(20,1)
+  m2, a2 = default_net(20,5), default_net(20,1)
+  return PPOCNN(firstIndex, actor=m1, critic=a1, obs_dim=13, act_dim=5),\
+        PPOCNN(secondIndex, actor=m2, critic=a2, obs_dim=13, act_dim=5)
 
 directions = list(game.Actions._directions.keys())
 
@@ -75,10 +77,37 @@ class mlp(nn.Module):
         self.layers = nn.ModuleList([nn.Linear(layers[i-1],layers[i]) for i in range(1,len(layers))])
 
     def forward(self, x):
+        x = x if isinstance(x,torch.Tensor) else torch.tensor(x, dtype=torch.float32)
         for l in self.layers[:-1]:
             x = F.relu(l(x))
         return self.layers[-1](x)
     
+class default_net(nn.Module):
+    def __init__(self,aux_inputs, outputs):
+        super().__init__()
+        self.c1 = nn.Conv2d(7,16,5,stride=3)
+        self.c2 = nn.Conv2d(16,32,3,stride=2)
+        self.c3 = nn.Conv2d(32,16,2,stride=1)
+        self.l4 = nn.Linear(320, 128)
+        self.l5 = nn.Linear(128,outputs)
+        self.flatten = nn.Flatten()
+        self.l1 = nn.Linear(aux_inputs, 160)
+
+    def forward(self, input):
+        x,y = input
+        x = x if isinstance(x,torch.Tensor) else torch.tensor(x, dtype=torch.float32)
+        y = y if isinstance(y,torch.Tensor) else torch.tensor(y, dtype=torch.float32)
+        x = F.relu(self.c1(x))
+        x = F.relu(self.c2(x))
+        x = F.relu(self.c3(x))
+        x = self.flatten(x)
+
+        y = F.relu(self.l1(y))
+
+        z = torch.cat((x,y),dim=1)
+        z = F.relu(self.l4(z))
+        return self.l5(z)
+
 class numpy_mlp:
     def __init__(self, state_dict, layers):
         self.state_dict=self.numpify(state_dict) 
@@ -110,7 +139,6 @@ class numpy_mlp:
     
 # print(m(torch.tensor([1.,1])))
 # print(m_.forward(np.array([1.,1])))
-
 
 
 class PPOAgent(Agent1):
@@ -155,7 +183,7 @@ class PPOAgent(Agent1):
         self.timesteps_per_batch = 10                 # Number of timesteps to run per batch
         self.max_timesteps_per_episode = 1600           # Max number of timesteps per episode
         self.n_updates_per_iteration = 5                # Number of times to update actor/critic per iteration
-        self.lr = 0.005                                 # Learning rate of actor optimizer
+        self.lr = 0.01                                 # Learning rate of actor optimizer
         self.gamma = 0.95                               # Discount factor to be applied when calculating Rewards-To-Go
         self.clip = 0.2                                 # Recommended 0.2, helps define the threshold to clip the ratio during SGA
 
@@ -171,14 +199,16 @@ class PPOAgent(Agent1):
     
     def get_policy(self, gameState: capture.GameState):
         input = self.construct_input(gameState)
-        input = torch.tensor(input, dtype=torch.float32)
         output = self.actor(input)
         return output.detach().numpy()
            
     def get_action(self, gameState: capture.GameState, policy=None):
+        # o1,o2 = self.construct_input(gameState)
+        # print(f"o1 {o1.shape} o2 {o2.shape}")
         actions = gameState.getLegalActions(self.index)
         if policy is None:
             policy = self.get_policy(gameState)
+        policy = policy.reshape([-1])
         policy_ = policy
         policy = np.array([policy[directions.index(a)] for a in actions])
         policy = np.e**policy
@@ -190,7 +220,9 @@ class PPOAgent(Agent1):
         # print(f"CHOSEN ACTIONS: {actions[action]}")
         return actions[action], log_prob, action
     
-
+    def chooseAction(self, gameState: capture.GameState):
+        action, log_prob, idx = self.get_action(gameState)
+        return action
     
     def reset(self):
         self.logger = {
@@ -225,11 +257,13 @@ class PPOAgent(Agent1):
             discounted_reward = rew + discounted_reward * self.gamma
             ep_rtgs.insert(0, discounted_reward)
 
+        print(ep_rtgs)
         return ep_rtgs
 
     
 
     def learn(self):
+        print("LEARN")
         """
 			Train the actor and critic networks. Here is where the main PPO algorithm resides.
 
@@ -243,7 +277,8 @@ class PPOAgent(Agent1):
         t_so_far = 0 # Timesteps simulated so far
         i_so_far = 0 # Iterations ran so far                                                                  # ALG STEP 2
         # Autobots, roll out (just kidding, we're collecting our batch simulations here)
-        batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()                     # ALG STEP 3
+        batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()  
+        # print(f"OBS {batch_obs[0].shape} {batch_obs[1].shape} ACTS {batch_acts.shape} LOG {batch_log_probs.shape} RTG {batch_rtgs.shape} LENS {batch_lens}")                   # ALG STEP 3
         # Calculate how many timesteps we collected this batch
         t_so_far += np.sum(batch_lens)
 
@@ -411,4 +446,94 @@ class PPOAgent(Agent1):
         self.batch_lens=[]
 
 
+class PPOCNN(PPOAgent):
+    def rollout(self):
+        batch0 = [obs[0] for obs in self.batch_obs]
+        batch1 = [obs[1] for obs in self.batch_obs]
+        return (torch.tensor(np.concatenate(batch0),dtype=torch.float32), torch.tensor(np.concatenate(batch1),dtype=torch.float32)), \
+                F.one_hot(torch.tensor(np.array(self.batch_acts),dtype=torch.long),num_classes=self.act_dim), \
+                torch.tensor(np.array(self.batch_log_probs),dtype=torch.float32), \
+                torch.tensor(np.array(self.batch_rtgs),dtype=torch.float32), \
+                self.batch_lens  
+    
+    def construct_input(self, gameState:capture.GameState) -> tuple[np.array]:
+        image_input = np.expand_dims(self.one_hot(gameState),0)
+        #x,y position -> 8 items
+        positions = self.extract_positions(gameState)
+        #scared?,timer -> 8 items
+        scared = self.scared(gameState)
+        #food needed -> 4 items
+        food = self.percent_food_needed(gameState)
+        return image_input, np.expand_dims(np.concatenate((positions, scared, food)),0)
 
+def num_params(model):
+    n = 0
+    for v in model.parameters():
+        n+=v.numel()
+    return n
+
+
+# n = default_net(12)
+# input1 = torch.randn(1,7,46,26)
+# input2 = torch.randn(1,12)
+# n(input1,input2)
+
+# t = time.time()
+
+# input = torch.randn(1,7,46,26)
+# c1 = nn.Conv2d(7,16,5,stride=3)
+# c2 = nn.Conv2d(16,32,3,stride=2)
+# c3 = nn.Conv2d(32,16,2,stride=1)
+# c4 = nn.Linear(320, 128)
+# c5 = nn.Linear(128,5)
+
+
+
+# print(num_params(c1))
+# print(num_params(c2))
+# print(num_params(c3))
+# print(num_params(c4))
+# print(num_params(c5))
+
+# res = c1(input)
+# res = c2(res)
+# res = c3(res)
+# res = nn.Flatten()(res)
+# res = c4(res)
+# res = c5(res)
+
+
+# print(f"TIME {time.time()-t}")
+# print(res.size())
+# print(np.prod(res.size()))
+
+# t = time.time()
+
+# input = torch.randn(1,4,84,84)
+# c1 = nn.Conv2d(4,32,8,stride=4)
+# c2 = nn.Conv2d(32,64,4,stride=2)
+# c3 = nn.Conv2d(64,64,3,stride=1)
+# c4 = nn.Linear(3136, 512)
+# c5 = nn.Linear(512,18)
+
+# print(num_params(c1))
+# print(num_params(c2))
+# print(num_params(c3))
+# print(num_params(c4))
+# print(num_params(c5))
+
+# res = c1(input)
+# res = c2(res)
+# res = c3(res)
+# res = nn.Flatten()(res)
+# res = c4(res)
+# res = c5(res)
+
+# n = nn.Sequential(c1,c2,c3,c4,c5)
+# dump_nnet(n,"time_test.out")
+# print(list(load_parameters("time_test.out").keys()))
+
+
+# print(f"TIME {time.time()-t}")
+# print(res.size())
+# print(np.prod(res.size()))
